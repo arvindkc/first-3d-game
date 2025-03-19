@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spanish Vocabulary 3D Game</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        color: white;
+      }
+      canvas {
+        display: block;
+      }
+      #gameUI {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      #score {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        font-size: 24px;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 10px 15px;
+        border-radius: 10px;
+      }
+      #wordDisplay {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 32px;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 10px 20px;
+        border-radius: 10px;
+        text-align: center;
+      }
+      #instructions {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 18px;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 10px 20px;
+        border-radius: 10px;
+        text-align: center;
+        max-width: 80%;
+      }
+      #gameOver {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 30px;
+        border-radius: 15px;
+        text-align: center;
+        display: none;
+        z-index: 100;
+      }
+      .button {
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        margin: 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 18px;
+        transition: background-color 0.3s;
+        display: inline-block;
+        text-decoration: none;
+      }
+      .button:hover {
+        background-color: #45a049;
+      }
+      #homeButton {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        font-size: 16px;
+        z-index: 10;
+        pointer-events: auto;
+      }
+      #timerBar {
+        position: absolute;
+        bottom: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 50%;
+        height: 10px;
+        background-color: rgba(255, 255, 255, 0.3);
+        border-radius: 5px;
+        overflow: hidden;
+      }
+      #timerFill {
+        height: 100%;
+        background-color: #4caf50;
+        width: 100%;
+        border-radius: 5px;
+        transition: width 0.1s linear;
+      }
+      .word-block {
+        position: absolute;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 24px;
+        pointer-events: none;
+        user-select: none;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        background-color: rgba(0, 0, 0, 0.5);
+        padding: 10px 15px;
+        border-radius: 8px;
+        white-space: nowrap;
+        min-width: 80px;
+        text-align: center;
+        transform: translate(-50%, -50%);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="gameUI">
+      <div id="score">Score: <span id="scoreValue">0</span></div>
+      <div id="wordDisplay">Spanish Word</div>
+      <div id="timerBar"><div id="timerFill"></div></div>
+      <div id="instructions">
+        Collect the 3D blocks with the correct English translation!
+      </div>
+      <a id="homeButton" class="button" href="index.html">← Home</a>
+    </div>
+
+    <div id="gameOver">
+      <h2>Game Complete!</h2>
+      <p>Your score: <span id="finalScore">0</span> / 100</p>
+      <p>Words learned: <span id="wordsLearned">0</span></p>
+      <button id="restartButton" class="button">Play Again</button>
+      <br />
+      <a href="index.html" class="button">Return to Home</a>
+    </div>
+
+    <script
+      async
+      src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+    ></script>
+
+    <script>
+      // Game variables
+      let scene, camera, renderer, player;
+      let score = 0;
+      let wordBlocks = [];
+      let currentWord = null;
+      let currentOptions = [];
+      let gameActive = true;
+      let wordsLearned = new Set();
+      let timeLeft = 10;
+      let timerInterval;
+
+      // Spanish vocabulary - 100 common words with translations
+      const vocabulary = [
+        { spanish: "hola", english: "hello" },
+        { spanish: "adiós", english: "goodbye" },
+        { spanish: "por favor", english: "please" },
+        { spanish: "gracias", english: "thank you" },
+        { spanish: "sí", english: "yes" },
+        { spanish: "no", english: "no" },
+        { spanish: "disculpe", english: "excuse me" },
+        { spanish: "lo siento", english: "sorry" },
+        { spanish: "amor", english: "love" },
+        { spanish: "feliz", english: "happy" },
+        { spanish: "triste", english: "sad" },
+        { spanish: "bueno", english: "good" },
+        { spanish: "malo", english: "bad" },
+        { spanish: "grande", english: "big" },
+        { spanish: "pequeño", english: "small" },
+        { spanish: "casa", english: "house" },
+        { spanish: "coche", english: "car" },
+        { spanish: "trabajo", english: "work" },
+        { spanish: "tiempo", english: "time" },
+        { spanish: "día", english: "day" },
+        { spanish: "noche", english: "night" },
+        { spanish: "agua", english: "water" },
+        { spanish: "comida", english: "food" },
+        { spanish: "amigo", english: "friend" },
+        { spanish: "familia", english: "family" },
+        { spanish: "hombre", english: "man" },
+        { spanish: "mujer", english: "woman" },
+        { spanish: "niño", english: "child" },
+        { spanish: "libro", english: "book" },
+        { spanish: "escuela", english: "school" },
+        { spanish: "trabajo", english: "job" },
+        { spanish: "ciudad", english: "city" },
+        { spanish: "país", english: "country" },
+        { spanish: "mundo", english: "world" },
+        { spanish: "rojo", english: "red" },
+        { spanish: "azul", english: "blue" },
+        { spanish: "verde", english: "green" },
+        { spanish: "amarillo", english: "yellow" },
+        { spanish: "negro", english: "black" },
+        { spanish: "blanco", english: "white" },
+        { spanish: "ahora", english: "now" },
+        { spanish: "luego", english: "later" },
+        { spanish: "siempre", english: "always" },
+        { spanish: "nunca", english: "never" },
+        { spanish: "a veces", english: "sometimes" },
+        { spanish: "hoy", english: "today" },
+        { spanish: "mañana", english: "tomorrow" },
+        { spanish: "ayer", english: "yesterday" },
+        { spanish: "arriba", english: "up" },
+        { spanish: "abajo", english: "down" },
+        { spanish: "dentro", english: "inside" },
+        { spanish: "fuera", english: "outside" },
+        { spanish: "nuevo", english: "new" },
+        { spanish: "viejo", english: "old" },
+        { spanish: "caliente", english: "hot" },
+        { spanish: "frío", english: "cold" },
+        { spanish: "fácil", english: "easy" },
+        { spanish: "difícil", english: "difficult" },
+        { spanish: "hablar", english: "to speak" },
+        { spanish: "comer", english: "to eat" },
+        { spanish: "beber", english: "to drink" },
+        { spanish: "dormir", english: "to sleep" },
+        { spanish: "caminar", english: "to walk" },
+        { spanish: "correr", english: "to run" },
+        { spanish: "ver", english: "to see" },
+        { spanish: "oír", english: "to hear" },
+        { spanish: "leer", english: "to read" },
+        { spanish: "escribir", english: "to write" },
+        { spanish: "pensar", english: "to think" },
+        { spanish: "saber", english: "to know" },
+        { spanish: "querer", english: "to want" },
+        { spanish: "poder", english: "can/to be able" },
+        { spanish: "deber", english: "should/must" },
+        { spanish: "salir", english: "to go out" },
+        { spanish: "entrar", english: "to enter" },
+        { spanish: "venir", english: "to come" },
+        { spanish: "ir", english: "to go" },
+        { spanish: "comprar", english: "to buy" },
+        { spanish: "vender", english: "to sell" },
+        { spanish: "uno", english: "one" },
+        { spanish: "dos", english: "two" },
+        { spanish: "tres", english: "three" },
+        { spanish: "cuatro", english: "four" },
+        { spanish: "cinco", english: "five" },
+        { spanish: "diez", english: "ten" },
+        { spanish: "veinte", english: "twenty" },
+        { spanish: "cien", english: "hundred" },
+        { spanish: "mil", english: "thousand" },
+        { spanish: "primero", english: "first" },
+        { spanish: "último", english: "last" },
+        { spanish: "mucho", english: "a lot" },
+        { spanish: "poco", english: "little" },
+        { spanish: "todo", english: "everything" },
+        { spanish: "nada", english: "nothing" },
+        { spanish: "algo", english: "something" },
+        { spanish: "porque", english: "because" },
+        { spanish: "cuando", english: "when" },
+        { spanish: "donde", english: "where" },
+        { spanish: "como", english: "how" },
+      ];
+
+      // Initialize WebAssembly distance function calculation
+      let wasmDistanceSquared;
+      const wasmCode = new Uint8Array([
+        0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 2, 124, 124, 1, 124, 3, 2, 1,
+        0, 7, 13, 1, 9, 100, 105, 115, 116, 97, 110, 99, 101, 0, 0, 10, 10, 1,
+        8, 0, 32, 0, 32, 1, 161, 15, 11,
+      ]);
+
+      // JavaScript fallback for distance calculation (used until WebAssembly loads)
+      function distanceSquared(x, z) {
+        return x * x + z * z;
+      }
+
+      // Initialize game once the page loads
+      window.addEventListener("load", () => {
+        initWebAssembly().then(() => {
+          init();
+          animate();
+        });
+      });
+
+      // Initialize WebAssembly
+      async function initWebAssembly() {
+        try {
+          const result = await WebAssembly.instantiate(wasmCode);
+          const wasmModule = result.instance;
+          wasmDistanceSquared = wasmModule.exports.distance;
+          console.log("WebAssembly module loaded successfully!");
+
+          // Override our distance function with the WASM version
+          distanceSquared = (x, z) => wasmDistanceSquared(x, z);
+        } catch (err) {
+          console.log(
+            "WebAssembly module failed to load, using JavaScript fallback:",
+            err
+          );
+        }
+      }
+
+      function init() {
+        // Create scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a75ff); // Blue sky background
+
+        // Create camera
+        camera = new THREE.PerspectiveCamera(
+          75,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(0, 10, 20);
+        camera.lookAt(0, 0, 0);
+
+        // Create renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Create lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
+
+        // Create floor
+        const floorGeometry = new THREE.PlaneGeometry(60, 60);
+        const floorMaterial = new THREE.MeshStandardMaterial({
+          color: 0xf5deb3, // Warm sandy color
+          side: THREE.DoubleSide,
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Create distant mountains for scenery
+        createMountains();
+
+        // Create player
+        const playerGeometry = new THREE.SphereGeometry(1, 32, 32);
+        const playerMaterial = new THREE.MeshStandardMaterial({
+          color: 0x3333ff,
+        });
+        player = new THREE.Mesh(playerGeometry, playerMaterial);
+        player.position.y = 1;
+        scene.add(player);
+
+        // Set up event listeners
+        window.addEventListener("resize", onWindowResize);
+        document.addEventListener("keydown", onKeyDown);
+        document
+          .getElementById("restartButton")
+          .addEventListener("click", restartGame);
+
+        // Start the game with the first word
+        nextWord();
+      }
+
+      function createMountains() {
+        const mountainGeometry = new THREE.ConeGeometry(8, 12, 4);
+        const mountainMaterial = new THREE.MeshStandardMaterial({
+          color: 0x228b22,
+        });
+
+        for (let i = 0; i < 15; i++) {
+          const mountain = new THREE.Mesh(mountainGeometry, mountainMaterial);
+          const distance = 40;
+          const angle = (i / 15) * Math.PI * 2;
+
+          mountain.position.x = Math.cos(angle) * distance;
+          mountain.position.z = Math.sin(angle) * distance;
+          mountain.position.y = 6;
+
+          // Randomly rotate and scale
+          mountain.rotation.y = Math.random() * Math.PI;
+          const scale = 0.8 + Math.random() * 0.4;
+          mountain.scale.set(scale, scale, scale);
+
+          scene.add(mountain);
+        }
+      }
+
+      function createWordBlocks() {
+        // Clear existing word blocks
+        wordBlocks.forEach((block) => {
+          scene.remove(block.mesh);
+          if (block.element && block.element.parentNode) {
+            block.element.parentNode.removeChild(block.element);
+          }
+        });
+        wordBlocks = [];
+
+        // Create new word blocks with options
+        currentOptions.forEach((option, index) => {
+          // Create a cube for each word option
+          const geometry = new THREE.BoxGeometry(4, 4, 4);
+          const material = new THREE.MeshStandardMaterial({
+            color: 0xffff00,
+            emissive: 0x555500,
+            metalness: 0.3,
+            roughness: 0.4,
+          });
+
+          const mesh = new THREE.Mesh(geometry, material);
+
+          // Position in a circle around the player with increased radius
+          const angle = (index / currentOptions.length) * Math.PI * 2;
+          const radius = 20; // Increased from 15 to spread blocks further apart
+          mesh.position.x = Math.cos(angle) * radius;
+          mesh.position.z = Math.sin(angle) * radius;
+          mesh.position.y = 2;
+
+          // Add to scene
+          scene.add(mesh);
+
+          // Create label for the block
+          const wordDiv = document.createElement("div");
+          wordDiv.className = "word-block";
+          wordDiv.textContent = option.english;
+          wordDiv.id = `word-block-${index}`; // Add unique ID
+          document.body.appendChild(wordDiv);
+
+          // Add to our tracking array
+          wordBlocks.push({
+            mesh,
+            element: wordDiv,
+            word: option,
+            correct: option.spanish === currentWord.spanish,
+            index: index,
+          });
+        });
+      }
+
+      function nextWord() {
+        // Reset timer
+        timeLeft = 10;
+        updateTimer();
+
+        // Clear any existing timer
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+
+        // Reset player position to starting point
+        player.position.set(0, 1, 0);
+
+        // Set timer for word selection - only if game is active
+        if (gameActive) {
+          timerInterval = setInterval(() => {
+            timeLeft -= 0.1;
+            updateTimer();
+
+            if (timeLeft <= 0) {
+              clearInterval(timerInterval);
+              timerInterval = null;
+
+              // Only proceed to next word if game is still active
+              if (gameActive) {
+                nextWord();
+              }
+            }
+          }, 100);
+        }
+
+        // Filter out words already learned if possible
+        let availableWords = vocabulary.filter(
+          (word) => !wordsLearned.has(word.spanish)
+        );
+
+        // If all words have been learned or not enough left, reset the learned set
+        if (availableWords.length < 4) {
+          if (wordsLearned.size >= vocabulary.length - 3) {
+            // Game complete!
+            endGame();
+            return;
+          }
+          // Just use the full vocabulary if we need more options
+          availableWords = vocabulary;
+        }
+
+        // Select a random word
+        currentWord =
+          availableWords[Math.floor(Math.random() * availableWords.length)];
+        document.getElementById("wordDisplay").textContent =
+          currentWord.spanish;
+
+        // Prepare options (3 wrong + 1 correct)
+        const wrongOptions = vocabulary
+          .filter((word) => word.spanish !== currentWord.spanish)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3);
+
+        // Combine and shuffle options
+        currentOptions = [...wrongOptions, currentWord].sort(
+          () => 0.5 - Math.random()
+        );
+
+        // Create visual blocks for options
+        createWordBlocks();
+      }
+
+      function updateTimer() {
+        const percent = (timeLeft / 10) * 100;
+        document.getElementById("timerFill").style.width = `${percent}%`;
+
+        // Change color based on time left
+        if (percent > 60) {
+          document.getElementById("timerFill").style.backgroundColor =
+            "#4CAF50"; // Green
+        } else if (percent > 30) {
+          document.getElementById("timerFill").style.backgroundColor =
+            "#FFC107"; // Amber
+        } else {
+          document.getElementById("timerFill").style.backgroundColor =
+            "#F44336"; // Red
+        }
+      }
+
+      function onKeyDown(event) {
+        if (!gameActive) return;
+
+        const speed = 0.5;
+        let moved = false;
+
+        switch (event.key) {
+          case "ArrowUp":
+          case "w":
+            player.position.z -= speed;
+            moved = true;
+            break;
+          case "ArrowDown":
+          case "s":
+            player.position.z += speed;
+            moved = true;
+            break;
+          case "ArrowLeft":
+          case "a":
+            player.position.x -= speed;
+            moved = true;
+            break;
+          case "ArrowRight":
+          case "d":
+            player.position.x += speed;
+            moved = true;
+            break;
+        }
+
+        // Keep player within bounds
+        player.position.x = Math.max(-25, Math.min(25, player.position.x));
+        player.position.z = Math.max(-25, Math.min(25, player.position.z));
+
+        if (moved) {
+          checkCollisions();
+        }
+      }
+
+      function checkCollisions() {
+        // Check for collisions with word blocks
+        for (let i = wordBlocks.length - 1; i >= 0; i--) {
+          const block = wordBlocks[i];
+          const distX = player.position.x - block.mesh.position.x;
+          const distZ = player.position.z - block.mesh.position.z;
+
+          // Using our WebAssembly or JS distance function
+          const distSquared = distanceSquared(distX, distZ);
+
+          if (distSquared < 16) {
+            // 4^2 (adjusted for larger blocks)
+            // Stop timer to prevent auto-advance while processing collision
+            if (timerInterval) {
+              clearInterval(timerInterval);
+              timerInterval = null;
+            }
+
+            // Collect the block
+            scene.remove(block.mesh);
+
+            // Check if correct
+            if (block.correct) {
+              // Correct answer - update score globally
+              score += 10;
+              wordsLearned.add(currentWord.spanish);
+              document.getElementById("scoreValue").textContent = score;
+
+              // Flash the score with a green highlight
+              const scoreElement = document.getElementById("score");
+              scoreElement.style.backgroundColor = "rgba(76, 175, 80, 0.8)";
+              setTimeout(() => {
+                scoreElement.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+              }, 500);
+            } else {
+              // Incorrect answer
+              // Flash the score with a red highlight
+              const scoreElement = document.getElementById("score");
+              scoreElement.style.backgroundColor = "rgba(255, 0, 0, 0.8)";
+              setTimeout(() => {
+                scoreElement.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
+              }, 500);
+            }
+
+            // Clean up all word blocks
+            wordBlocks.forEach((block) => {
+              scene.remove(block.mesh);
+              if (block.element && block.element.parentNode) {
+                block.element.parentNode.removeChild(block.element);
+              }
+            });
+            wordBlocks = [];
+
+            // Check end game conditions
+            if (wordsLearned.size >= 100 || score >= 1000) {
+              endGame();
+            } else {
+              // Delay next word slightly to prevent immediate collisions
+              setTimeout(() => {
+                if (gameActive) {
+                  nextWord();
+                }
+              }, 500);
+            }
+
+            break;
+          }
+        }
+      }
+
+      function updateWordBlockPositions() {
+        // Precompute all positions and distances first
+        const blockPositions = [];
+
+        // Update the HTML elements to follow their 3D counterparts
+        wordBlocks.forEach((block, idx) => {
+          if (block.mesh && block.element) {
+            // Get the position of the 3D object in screen space
+            const vector = new THREE.Vector3();
+            vector.setFromMatrixPosition(block.mesh.matrixWorld);
+
+            // Calculate distance from camera for z-ordering
+            const distance = new THREE.Vector3()
+              .subVectors(camera.position, block.mesh.position)
+              .length();
+
+            vector.project(camera);
+
+            // Convert to CSS coordinates
+            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-vector.y * 0.5 + 0.5) * window.innerHeight;
+
+            // Store computed values
+            blockPositions.push({
+              element: block.element,
+              x,
+              y,
+              z: vector.z,
+              distance,
+              index: idx,
+            });
+          }
+        });
+
+        // Sort by distance from camera (furthest first)
+        blockPositions.sort((a, b) => b.distance - a.distance);
+
+        // Update positions and z-index based on sorting
+        blockPositions.forEach((block, idx) => {
+          // Set the position of the HTML element
+          block.element.style.left = `${block.x}px`;
+          block.element.style.top = `${block.y}px`;
+          block.element.style.zIndex = 100 + idx; // Ensure proper layering
+
+          // Make the elements visible if they're in front of the camera
+          if (block.z < 1) {
+            block.element.style.display = "flex";
+          } else {
+            block.element.style.display = "none";
+          }
+        });
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (gameActive) {
+          // Rotate word blocks
+          wordBlocks.forEach((block) => {
+            block.mesh.rotation.y += 0.01;
+            block.mesh.rotation.x += 0.005;
+          });
+
+          // Update HTML word positions to match 3D blocks
+          updateWordBlockPositions();
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function endGame() {
+        gameActive = false;
+        clearInterval(timerInterval);
+
+        document.getElementById("finalScore").textContent = score;
+        document.getElementById("wordsLearned").textContent = wordsLearned.size;
+        document.getElementById("gameOver").style.display = "block";
+      }
+
+      function restartGame() {
+        // Clear any existing timer
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+
+        // Reset game state
+        score = 0;
+        wordsLearned = new Set();
+        timeLeft = 10;
+        currentWord = null;
+        currentOptions = [];
+        gameActive = true;
+
+        // Update UI
+        document.getElementById("scoreValue").textContent = score;
+        document.getElementById("gameOver").style.display = "none";
+        updateTimer();
+
+        // Reset player position
+        player.position.set(0, 1, 0);
+
+        // Clear any existing word blocks
+        wordBlocks.forEach((block) => {
+          scene.remove(block.mesh);
+          if (block.element && block.element.parentNode) {
+            block.element.parentNode.removeChild(block.element);
+          }
+        });
+        wordBlocks = [];
+
+        // Start new game after a short delay to ensure clean initialization
+        setTimeout(() => {
+          nextWord();
+        }, 100);
+      }
+    </script>
+  </body>
+</html>
