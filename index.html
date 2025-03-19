@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Collection Game</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+      }
+      #info {
+        position: absolute;
+        top: 10px;
+        width: 100%;
+        text-align: center;
+        color: white;
+        font-size: 20px;
+        text-shadow: 1px 1px 2px black;
+        pointer-events: none;
+      }
+      #gameOver {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        display: none;
+      }
+      #restartButton {
+        padding: 10px 20px;
+        margin-top: 20px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="info">
+      Score: <span id="score">0</span> | Time: <span id="time">60</span>
+    </div>
+    <div id="gameOver">
+      <h2>Game Over!</h2>
+      <p>Your score: <span id="finalScore">0</span></p>
+      <button id="restartButton">Play Again</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+      // Game variables
+      let scene, camera, renderer, player;
+      let collectibles = [];
+      let obstacles = [];
+      let score = 0;
+      let timeLeft = 60;
+      let gameActive = true;
+
+      // Initialize game directly without waiting for WebAssembly
+      // We'll implement a JavaScript fallback for distance calculation
+      init();
+
+      function distanceSquared(x, z) {
+        return x * x + z * z;
+      }
+
+      function init() {
+        // Create scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+
+        // Create camera
+        camera = new THREE.PerspectiveCamera(
+          75,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(0, 10, 20);
+        camera.lookAt(0, 0, 0);
+
+        // Create renderer
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Create light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
+
+        // Create floor
+        const floorGeometry = new THREE.PlaneGeometry(50, 50);
+        const floorMaterial = new THREE.MeshStandardMaterial({
+          color: 0x66aa66,
+          side: THREE.DoubleSide,
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+
+        // Create player
+        const playerGeometry = new THREE.SphereGeometry(1, 32, 32);
+        const playerMaterial = new THREE.MeshStandardMaterial({
+          color: 0x3333ff,
+        });
+        player = new THREE.Mesh(playerGeometry, playerMaterial);
+        player.position.y = 1;
+        scene.add(player);
+
+        // Create collectibles and obstacles
+        createCollectibles(15);
+        createObstacles(10);
+
+        // Event listeners
+        window.addEventListener("resize", onWindowResize);
+        document.addEventListener("keydown", onKeyDown);
+
+        // Game timer
+        setInterval(() => {
+          if (gameActive) {
+            timeLeft--;
+            document.getElementById("time").textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+              endGame();
+            }
+          }
+        }, 1000);
+
+        // Start game loop
+        animate();
+      }
+
+      function createCollectibles(count) {
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const material = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+
+        for (let i = 0; i < count; i++) {
+          const collectible = new THREE.Mesh(geometry, material);
+
+          // Random position
+          collectible.position.x = Math.random() * 40 - 20;
+          collectible.position.z = Math.random() * 40 - 20;
+          collectible.position.y = 0.5;
+
+          // Rotating animation
+          collectible.userData = {
+            rotationSpeed: Math.random() * 0.05 + 0.01,
+          };
+
+          scene.add(collectible);
+          collectibles.push(collectible);
+        }
+      }
+
+      function createObstacles(count) {
+        const geometry = new THREE.ConeGeometry(1, 2, 8);
+        const material = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+
+        for (let i = 0; i < count; i++) {
+          const obstacle = new THREE.Mesh(geometry, material);
+
+          // Random position
+          obstacle.position.x = Math.random() * 40 - 20;
+          obstacle.position.z = Math.random() * 40 - 20;
+          obstacle.position.y = 1;
+
+          // Random movement
+          obstacle.userData = {
+            direction: new THREE.Vector3(
+              Math.random() * 0.06 - 0.03,
+              0,
+              Math.random() * 0.06 - 0.03
+            ),
+          };
+
+          scene.add(obstacle);
+          obstacles.push(obstacle);
+        }
+      }
+
+      function onKeyDown(event) {
+        if (!gameActive) return;
+
+        const speed = 1.0;
+
+        switch (event.key) {
+          case "ArrowUp":
+          case "w":
+            player.position.z -= speed;
+            break;
+          case "ArrowDown":
+          case "s":
+            player.position.z += speed;
+            break;
+          case "ArrowLeft":
+          case "a":
+            player.position.x -= speed;
+            break;
+          case "ArrowRight":
+          case "d":
+            player.position.x += speed;
+            break;
+        }
+
+        // Keep player within bounds
+        player.position.x = Math.max(-24, Math.min(24, player.position.x));
+        player.position.z = Math.max(-24, Math.min(24, player.position.z));
+
+        checkCollisions();
+      }
+
+      function checkCollisions() {
+        // Check collectible collisions
+        for (let i = collectibles.length - 1; i >= 0; i--) {
+          const collectible = collectibles[i];
+          const distX = player.position.x - collectible.position.x;
+          const distZ = player.position.z - collectible.position.z;
+
+          // Use JavaScript for distance calculation (fallback for WebAssembly)
+          const distSquared = distanceSquared(distX, distZ);
+
+          if (distSquared < 2.25) {
+            // 1.5^2
+            // Collect item
+            scene.remove(collectible);
+            collectibles.splice(i, 1);
+
+            // Update score
+            score += 10;
+            document.getElementById("score").textContent = score;
+
+            // Create a new collectible to replace the collected one
+            if (gameActive) {
+              createCollectibles(1);
+            }
+          }
+        }
+
+        // Check obstacle collisions
+        for (const obstacle of obstacles) {
+          const distX = player.position.x - obstacle.position.x;
+          const distZ = player.position.z - obstacle.position.z;
+
+          // Use JavaScript for distance calculation
+          const distSquared = distanceSquared(distX, distZ);
+
+          if (distSquared < 2.25) {
+            // 1.5^2
+            // Game over on obstacle collision
+            endGame();
+            break;
+          }
+        }
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        if (gameActive) {
+          // Rotate collectibles
+          collectibles.forEach((collectible) => {
+            collectible.rotation.y += collectible.userData.rotationSpeed;
+          });
+
+          // Move obstacles
+          obstacles.forEach((obstacle) => {
+            obstacle.position.x += obstacle.userData.direction.x;
+            obstacle.position.z += obstacle.userData.direction.z;
+
+            // Bounce off edges
+            if (Math.abs(obstacle.position.x) > 23) {
+              obstacle.userData.direction.x *= -1;
+            }
+
+            if (Math.abs(obstacle.position.z) > 23) {
+              obstacle.userData.direction.z *= -1;
+            }
+          });
+
+          checkCollisions();
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function endGame() {
+        gameActive = false;
+        document.getElementById("finalScore").textContent = score;
+        document.getElementById("gameOver").style.display = "block";
+      }
+
+      // Restart game
+      document.getElementById("restartButton").addEventListener("click", () => {
+        // Reset game state
+        score = 0;
+        timeLeft = 60;
+        gameActive = true;
+
+        // Update UI
+        document.getElementById("score").textContent = score;
+        document.getElementById("time").textContent = timeLeft;
+        document.getElementById("gameOver").style.display = "none";
+
+        // Remove existing collectibles and obstacles
+        collectibles.forEach((c) => scene.remove(c));
+        obstacles.forEach((o) => scene.remove(o));
+
+        collectibles = [];
+        obstacles = [];
+
+        // Reset player position
+        player.position.set(0, 1, 0);
+
+        // Create new collectibles and obstacles
+        createCollectibles(15);
+        createObstacles(10);
+      });
+
+      // Add some WebAssembly functionality for demonstration
+      // This is a simpler approach that doesn't block game initialization
+      const wasmCode = new Uint8Array([
+        0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 2, 124, 124, 1, 124, 3, 2, 1,
+        0, 7, 13, 1, 9, 100, 105, 115, 116, 97, 110, 99, 101, 0, 0, 10, 10, 1,
+        8, 0, 32, 0, 32, 1, 161, 15, 11,
+      ]);
+
+      // Load WebAssembly in the background without blocking game start
+      WebAssembly.instantiate(wasmCode)
+        .then((result) => {
+          // When WebAssembly loads, replace our distance function with the WASM version
+          const wasmModule = result.instance;
+          const wasmDistance = wasmModule.exports.distance;
+
+          // Override our distance function with the WASM version
+          distanceSquared = (x, z) => wasmDistance(x, z);
+          console.log("WebAssembly module loaded successfully!");
+        })
+        .catch((err) => {
+          console.log(
+            "WebAssembly module failed to load, using JavaScript fallback:",
+            err
+          );
+        });
+    </script>
+  </body>
+</html>
